@@ -1,5 +1,5 @@
-#ifndef FILE_BROWSER_H
-#define FILE_BROWSER_H
+#ifndef MENU_H
+#define MENU_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,11 +10,11 @@
 #include <sys/stat.h>
 #include <limits.h>
 
-// == Raw mode to get the keys ==
+// == SHARED TERMINAL SETTINGS ==
+
 static void set_raw_mode(int enable) {
     static struct termios oldt;
     struct termios newt;
-
     if (enable) {
         tcgetattr(STDIN_FILENO, &oldt);
         newt = oldt;
@@ -25,7 +25,6 @@ static void set_raw_mode(int enable) {
     }
 }
 
-// == Read keys ==
 static char *get_key(void) {
     static char buffer[4];
     memset(buffer, 0, sizeof(buffer));
@@ -36,25 +35,76 @@ static char *get_key(void) {
     return buffer;
 }
 
-// == File Browser==
+// == CHOICE FROM ARRAY (For Myrient/Scraping) ==
+
+static const char* choice_from_array(const char *title, const char *items[], size_t count) {
+    int selected = 0;
+    int scroll_offset = 0;
+    const int VIEWPORT_HEIGHT = 15;
+
+    while (1) {
+        printf("\033[H\033[J"); // Clear screen
+        printf("=== %s ===\n", title);
+        printf("Items %d-%d of %zu | ↑/↓ Navigate\n",
+                scroll_offset + 1,
+                (int)(scroll_offset + VIEWPORT_HEIGHT > count ? count : scroll_offset + VIEWPORT_HEIGHT),
+                count);
+        printf("----------------------------------------\n");
+
+        for (int i = 0; i < VIEWPORT_HEIGHT; i++) {
+            int idx = i + scroll_offset;
+            if (idx >= (int)count) break;
+            if (idx == selected) printf("\033[1;32m> %s\033[0m\n", items[idx]);
+            else printf("  %s\n", items[idx]);
+        }
+        printf("----------------------------------------\n");
+
+        set_raw_mode(1);
+        char *key = get_key();
+        set_raw_mode(0);
+
+        if (strcmp(key, "\x1b[A") == 0) { // UP
+            if (selected > 0) {
+                selected--;
+                if (selected < scroll_offset) scroll_offset = selected;
+            } else {
+                selected = count - 1;
+                scroll_offset = (int)count - VIEWPORT_HEIGHT;
+                if (scroll_offset < 0) scroll_offset = 0;
+            }
+        } else if (strcmp(key, "\x1b[B") == 0) { // DOWN
+            if (selected < (int)count - 1) {
+                selected++;
+                if (selected >= scroll_offset + VIEWPORT_HEIGHT) scroll_offset = selected - VIEWPORT_HEIGHT + 1;
+            } else {
+                selected = 0;
+                scroll_offset = 0;
+            }
+        } else if (key[0] == '\n' || key[0] == '\r') {
+            return items[selected];
+        }
+    }
+}
+
+// == LOCAL FILE BROWSER (With Scrolling) ==
+
 static char* select_file(void) {
     char current_path[PATH_MAX];
     getcwd(current_path, sizeof(current_path));
     int selected = 0;
+    int scroll_offset = 0;
+    const int VIEWPORT_HEIGHT = 15;
 
     while (1) {
         DIR *dir = opendir(current_path);
-        if (!dir) {
-            perror("opendir");
-            return NULL;
-        }
+        if (!dir) return NULL;
 
         struct dirent *entry;
-        char items[256][NAME_MAX];
-        int is_dir[256];
+        char items[1024][NAME_MAX]; // Increased buffer for local files
+        int is_dir[1024];
         int count = 0;
 
-        while ((entry = readdir(dir)) != NULL && count < 256) {
+        while ((entry = readdir(dir)) != NULL && count < 1024) {
             if (strcmp(entry->d_name, ".") == 0) continue;
             strcpy(items[count], entry->d_name);
             struct stat st;
@@ -65,40 +115,56 @@ static char* select_file(void) {
         }
         closedir(dir);
 
-        system("clear");
-        printf("📂 File Browser\n"); // == TITLE ==
-        printf("Path: %s\n", current_path);
-        printf("↑/↓ Navigate | Enter = Open\n");
+        printf("\033[H\033[J");
+        printf("📂 File Browser\nPath: %s\n", current_path);
+        printf("Items %d-%d of %d | Enter = Open/Select\n", scroll_offset+1, 
+                (scroll_offset + VIEWPORT_HEIGHT > count ? count : scroll_offset + VIEWPORT_HEIGHT), count);
         printf("----------------------------------------\n");
 
-        for (int i = 0; i < count; i++) {
-            printf("%s %s%s\n",
-                   (i == selected ? "> " : "  "),
-                   (is_dir[i] ? "[DIR] " : "[FILE] "),
-                   items[i]);
+        for (int i = 0; i < VIEWPORT_HEIGHT; i++) {
+            int idx = i + scroll_offset;
+            if (idx >= count) break;
+            if (idx == selected) {
+                printf("\033[1;36m> %s %s\033[0m\n", (is_dir[idx] ? "📁" : "📄"), items[idx]);
+            } else {
+                printf("  %s %s\n", (is_dir[idx] ? "📁" : "📄"), items[idx]);
+            }
         }
+        printf("----------------------------------------\n");
 
         set_raw_mode(1);
         char *key = get_key();
         set_raw_mode(0);
 
-        if (strcmp(key, "\x1b[A") == 0) {
-            selected = (selected - 1 + count) % count;
-        } else if (strcmp(key, "\x1b[B") == 0) {
-            selected = (selected + 1) % count;
+        if (strcmp(key, "\x1b[A") == 0) { // UP
+            if (selected > 0) {
+                selected--;
+                if (selected < scroll_offset) scroll_offset = selected;
+            } else {
+                selected = count - 1;
+                scroll_offset = count - VIEWPORT_HEIGHT;
+                if (scroll_offset < 0) scroll_offset = 0;
+            }
+        } else if (strcmp(key, "\x1b[B") == 0) { // DOWN
+            if (selected < count - 1) {
+                selected++;
+                if (selected >= scroll_offset + VIEWPORT_HEIGHT) scroll_offset = selected - VIEWPORT_HEIGHT + 1;
+            } else {
+                selected = 0;
+                scroll_offset = 0;
+            }
         } else if (key[0] == '\n' || key[0] == '\r') {
             if (is_dir[selected]) {
                 if (strcmp(items[selected], "..") == 0) {
                     char *slash = strrchr(current_path, '/');
-                    if (slash && slash != current_path)
-                        *slash = '\0';
-                    else
-                        strcpy(current_path, "/");
+                    if (slash && slash != current_path) *slash = '\0';
+                    else strcpy(current_path, "/");
                 } else {
-                    strcat(current_path, "/");
+                    if (strcmp(current_path, "/") != 0) strcat(current_path, "/");
                     strcat(current_path, items[selected]);
                 }
                 selected = 0;
+                scroll_offset = 0;
             } else {
                 char *result = malloc(PATH_MAX);
                 snprintf(result, PATH_MAX, "%s/%s", current_path, items[selected]);
