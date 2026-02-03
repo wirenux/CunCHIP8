@@ -73,7 +73,7 @@ Optional flags:
 
 ## Dependencies
 
-- **[FileBrowser.h](https://github.com/squach90/FileBrowser.h)**
+- **[FileBrowser.h](https://github.com/wirenux/choiceMaker.h)**
 - **SDL**
 - **Standard C** – `stdio.h`, `stdint.h`, `stdbool.h` ,`stdlib.h`, `string.h`, `stddef.h`, `time.h`
 - **POSIX / Terminal** – `unistd.h`, `dirent.h`, `termios.h`, `sys/stat.h`, `limits.h`
