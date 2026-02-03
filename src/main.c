@@ -1,3 +1,4 @@
+#include <string.h>
 #include <stdio.h>
 #include <SDL.h>
 #include "../includes/cpu.h"
@@ -6,10 +7,10 @@
 #include "../includes/file_browser.h"
 
 int debug = 0;
+int nosync = 0;
 
 int main(int argc, char **argv) {
 
-    int nosync = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--nosync") == 0)
@@ -39,9 +40,10 @@ int main(int argc, char **argv) {
 
     const int cycles_per_frame = 10; // opcode per frame
     const int frame_delay = 1000 / 60; // 60 FPS
-    uint32_t last_time = SDL_GetTicks();
 
     while (!controller_quit()) {
+        uint32_t start_ticks = SDL_GetTicks();
+
         controller_update(&chip);
 
         for (int i = 0; i < cycles_per_frame; i++) {
@@ -49,17 +51,14 @@ int main(int argc, char **argv) {
         }
 
         chip8_update_timers(&chip);
-
         draw_screen(&chip);
 
-        // 60hz sync
         if (!nosync) {
-            uint32_t now = SDL_GetTicks();
-            uint32_t elapsed = now - last_time;
-            if (elapsed < frame_delay) {
-                SDL_Delay(frame_delay - elapsed);
+            uint32_t end_ticks = SDL_GetTicks();
+            uint32_t duration = end_ticks - start_ticks;
+            if (duration < frame_delay) {
+                SDL_Delay(frame_delay - duration);
             }
-            last_time = SDL_GetTicks();
         }
     }
 

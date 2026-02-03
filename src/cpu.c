@@ -80,13 +80,23 @@ void chip8_emulation_cycle(Chip8 *chip) {
 
     switch (opcode & 0xF000) {
         case 0x0000:
-            if (opcode == 0x00E0) { // CLS
-                memset(chip->gfx, 0, sizeof(chip->gfx));
-                chip->draw_flag = true;
-                chip->pc += 2;
-            } else if (opcode == 0x00EE) { // RET
-                chip->sp--;
-                chip->pc = chip->stack[chip->sp];
+            switch (opcode) {
+                case 0x00E0: // CLS
+                    memset(chip->gfx, 0, sizeof(chip->gfx));
+                    chip->draw_flag = true;
+                    chip->pc += 2;
+                    break;
+
+                case 0x00EE: // RET
+                    if (chip->sp > 0) {
+                        chip->sp--;
+                        chip->pc = chip->stack[chip->sp];
+                        // Note: No pc += 2 here because we saved the address 
+                        // of the *next* instruction during the CALL.
+                    } else {
+                        fprintf(stderr, "Stack underflow at PC: 0x%03X\n", chip->pc);
+                    }
+                    break;
             }
             break;
 
@@ -94,15 +104,10 @@ void chip8_emulation_cycle(Chip8 *chip) {
             chip->pc = nnn;
             break;
 
-        case 0x2000:
-            if (chip->sp >= 16) {
-                fprintf(stderr, "Stack overflow!\n");
-                break;
-            }
-            nnn = opcode & 0x0FFF;
-            chip->stack[chip->sp] = chip->pc + 2;
+        case 0x2000: // CALL nnn
+            chip->stack[chip->sp] = chip->pc + 2; // Save NEXT instruction
             chip->sp++;
-            chip->pc = nnn;
+            chip->pc = nnn;                       // Jump to subroutine
             break;
 
         case 0x3000:

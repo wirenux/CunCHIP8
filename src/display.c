@@ -49,19 +49,16 @@ void draw_screen(Chip8 *chip) {
     if (!chip->draw_flag) return;
     chip->draw_flag = false;
 
-    SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
-    SDL_RenderClear(state.renderer);
+    uint32_t pixels[SCREEN_WIDTH * SCREEN_HEIGHT];
 
-    SDL_SetRenderDrawColor(state.renderer, 255, 255, 255, 255);
-    for (int y = 0; y < 32; y++) {
-        for (int x = 0; x < 64; x++) {
-            if (chip->gfx[x + y * 64]) {
-                SDL_Rect pixel = { x * SCREEN_SCALING, y * SCREEN_SCALING, SCREEN_SCALING, SCREEN_SCALING };
-                SDL_RenderFillRect(state.renderer, &pixel);
-            }
-        }
+    // Convert Chip-8 bits to RGBA pixels
+    for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+        pixels[i] = chip->gfx[i] ? 0xFFFFFFFF : 0x000000FF; // White or Black
     }
 
+    SDL_UpdateTexture(state.texture, NULL, pixels, SCREEN_WIDTH * sizeof(uint32_t));
+    SDL_RenderClear(state.renderer);
+    SDL_RenderCopy(state.renderer, state.texture, NULL, NULL);
     SDL_RenderPresent(state.renderer);
 }
 
